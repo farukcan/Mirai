@@ -3,10 +3,20 @@
 @{
     ViewData["Title"] = "Prompts";
 }
-
-<ul>
-@foreach (var prompt in Bot.Instance.prompts)
+<div class="accordion" id="prompts">
+@foreach (var prompt in Bot.Instance.prompts.Values)
 {
-    <li>@prompt.Name</li>
+  <div class="accordion-item">
+    <h2 class="accordion-header" id=@($"#{prompt.Id}-heading")>
+      <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target=@($"#{prompt.Id}-body") aria-expanded="true">
+        @prompt.Name
+      </button>
+    </h2>
+    <div id=@($"{prompt.Id}-body") class="accordion-collapse collapse show" aria-labelledby=@($"#{prompt.Id}-heading") data-bs-parent="#prompts">
+      <div class="accordion-body">
+        @Html.Raw(prompt.Text.Replace("\n", "<br />"))
+      </div>
+    </div>
+  </div>
 }
-</ul>
+</div>
