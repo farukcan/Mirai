@@ -1,0 +1,9 @@
+Rewrite the message in Turkish according to the following rules.
+- Use academic language.
+- Write a short sentence in the third person.
+- Do not use tense pronouns.
+- Turn time expressions into definite statements if required,
+Time: April 6, 2023 16:30
+From: Faruk
+Message: "Ali benim kardeşim."
+Result: [insert]

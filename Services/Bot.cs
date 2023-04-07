@@ -109,7 +109,7 @@ namespace Mirai.Services
             Log.Information($"Analyzing : {dialog.Message.Text}");
             var prompt = prompts["Analysis"]
                             .Use()
-                            .Set("sentence",dialog.Message.Text)
+                            .Set("message",dialog.Message.Text)
                             .Get();
             dialog.Results["prompt"] = prompt;
             dialog.Status = Dialog.State.Analysis;
@@ -182,6 +182,7 @@ namespace Mirai.Services
         }
         public async Task SaveDialog(Dialog dialog){
             Log.Information($"Saving Dialog {dialog.Id}");
+            dialog.UpdatedAt = DateTime.UtcNow;
             await rethink.Begin(out var R).End(R.Db("Mirai").Table("Dialogs").Get(dialog.Id).Update(dialog));
         }
     }

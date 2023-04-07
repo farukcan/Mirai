@@ -14,6 +14,8 @@ namespace Mirai.Models
         public bool IsQuestion { get; set; } = false;
         public bool IsInformation { get; set; } = false;
         public bool IsOrder { get; set; } = false;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
         public Dialog(Message message, string interlocutor)
         {
             Message = message;

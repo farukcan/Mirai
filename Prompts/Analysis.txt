@@ -1,7 +1,7 @@
-Extract the features of the following sentences and give all the answers, separated only by the words yes, no and commas (like yes, yes, no, yes)
-Sentences: "[sentence]"
+Extract the features of the following message and give all the answers, separated only by the words yes, no and commas (like yes, yes, no, yes)
+Message: "[message]"
 Question 1: Are questions being asked for information? 
 Question 2: Is it giving us useful information? 
 Question 3: Does it give you a specific order to you? 
-Question 4: Is it in Turkish? 
+Question 4: Is it Turkish? 
 Answer : [insert]
