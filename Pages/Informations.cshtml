@@ -1,0 +1,49 @@
+@page
+@model InformationsModel
+@{
+    ViewData["Title"] = "Informations";
+}
+
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>
+                Data
+            </th>
+            <th>
+                Type
+            </th>
+            <th>
+                Source
+            </th>
+            <th>
+                Time
+            </th>
+            <th>
+                Tags
+            </th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var information in Model.Informations)
+        {
+            <tr>
+                <td>
+                    @Html.DisplayFor(modelItem => information.Data)
+                </td>
+                <td>
+                    @Html.DisplayFor(modelItem => information.Type)
+                </td>
+                <td>
+                    @Html.DisplayFor(modelItem => information.Source)
+                </td>
+                <td>
+                    @Html.DisplayFor(modelItem => information.Time)
+                </td>
+                <td>
+                    @string.Join(',',information.Tags)
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>

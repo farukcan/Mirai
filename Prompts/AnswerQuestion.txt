@@ -1,0 +1,5 @@
+Answer question of "[from]" according to the information list, if you don't know say "Bilmiyorum."
+Information List: 
+[list]
+Question: "[question]"
+Ansert:  [insert]

@@ -1,0 +1,63 @@
+@page
+@model DialogsModel
+@{
+    ViewData["Title"] = "Dialogs";
+}
+
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>
+                Message
+            </th>
+            <th>
+                Answer
+            </th>
+            <th>
+                Interlocutor
+            </th>
+            <th>
+                Time
+            </th>
+            <th>
+                Status
+            </th>
+            <th>
+                Class
+            </th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var dialog in Model.Dialogs)
+        {
+            <tr>
+                <td>
+                    @Html.DisplayFor(modelItem => dialog.Message.Text)
+                </td>
+                <td>
+                    @Html.DisplayFor(modelItem => dialog.Answer)
+                </td>
+                <td>
+                    @Html.DisplayFor(modelItem => dialog.Interlocutor)
+                </td>
+                <td>
+                    @Html.DisplayFor(modelItem => dialog.UpdatedAt)
+                </td>
+                <td>
+                    @Html.DisplayFor(modelItem => dialog.Status)
+                </td>
+                <td>
+                    @if(dialog.IsInformation){
+                        <span>Information</span>
+                    }else if(dialog.IsOrder){
+                        <span>Order</span>
+                    }else if(dialog.IsQuestion){
+                        <span>Question</span>
+                    }else{
+                        <span>Unknown</span>
+                    }
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>

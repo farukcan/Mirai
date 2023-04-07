@@ -7,6 +7,7 @@ using Mirai.Models;
 using Serilog;
 using OpenAI_API.Models;
 using Newtonsoft.Json;
+using System.Globalization;
 
 namespace Mirai.Services
 {
@@ -72,7 +73,7 @@ namespace Mirai.Services
             Log.Information(update.Type.ToString() + " type update");
             if (update.Type == UpdateType.Message && update.Message is not null)
             {
-                var username = update.Message.From.Username ?? "no-username";
+                var username = update.Message.From?.Username ?? "no-username";
                 Log.Information($"Message from {username} received");
                 var dialog = new Dialog(update.Message, username);
                 await CreateDialog(dialog);
@@ -91,9 +92,9 @@ namespace Mirai.Services
                 if(dialog.Status == Dialog.State.Waiting){
                     await Analyze(dialog);
                 }else if(dialog.Status == Dialog.State.Information){
-                    await Answer(dialog,"Bilgi için teşekkürler.");
+                    await Inform(dialog);
                 }else if(dialog.Status == Dialog.State.Question){
-                    await Answer(dialog,"Soru sordunuz.");
+                    await AnswerQuestion(dialog);
                 }else if(dialog.Status == Dialog.State.Order){
                     await Answer(dialog,"Emir verdiniz");
                 }
@@ -111,7 +112,7 @@ namespace Mirai.Services
                             .Use()
                             .Set("message",dialog.Message.Text)
                             .Get();
-            dialog.Results["prompt"] = prompt;
+            dialog.Results["AnalysisPrompt"] = prompt;
             dialog.Status = Dialog.State.Analysis;
             await SaveDialog(dialog);
             var result = await Api.Completions.CreateCompletionAsync(
@@ -143,6 +144,7 @@ namespace Mirai.Services
                 await Answer(dialog,"Lütfen türkçe konuşun. Yabancı diller bana yasaklandı.");
                 return;
             }
+            // TODO: inline keyboard desteği ekle
             if(dialog.IsQuestion && dialog.IsQuestion == dialog.IsInformation){
                 await Answer(dialog,"Soru mu sordunuz? Yoksa bilgi mi veriyorsunuz?");
                 return;
@@ -166,6 +168,74 @@ namespace Mirai.Services
             await SaveDialog(dialog);
             await ProcessDialog(dialog);
         }
+        public async Task Inform(Dialog dialog){
+            if(dialog.Message.Text is null) return;
+            Log.Information($"Informing : {dialog.Message.Text}");
+            var prompt = prompts["Inform"]
+                            .Use()
+                            .Set("from",dialog.Interlocutor)
+                            .Set("message",dialog.Message.Text)
+                            .Get();
+            dialog.Results["InformPrompt"] = prompt;
+            await SaveDialog(dialog);
+            var result = await Api.Completions.CreateCompletionAsync(
+                prompt,
+                model : Model.DavinciText,
+                temperature: 1,
+                max_tokens: 256,
+                top_p: 1,
+                frequencyPenalty: 0,
+                presencePenalty: 0
+            );
+            dialog.Results["Inform"] = result;
+            // get first choice
+            var choice = result.Completions.FirstOrDefault();
+            if(choice is null){
+                await SetNoAnswer(dialog,"[Inform] Choice is null");
+                return;
+            }
+            var information = Information.FromUser(dialog.Interlocutor,choice.Text.Trim());
+            await CreateInformation(information);
+            // save information
+            await Answer(dialog,information.Data);
+        }
+        public async Task AnswerQuestion(Dialog dialog){
+            if(dialog.Message.Text is null) return;
+            Log.Information($"Answering Question : {dialog.Message.Text}");
+            // TODO: Optimize list
+            var infos = rethink.Linq<Information>("Mirai","Informations")
+                            .OrderByDescending(i=>i.Time)
+                            .ToArray();
+            var list = "";
+            foreach(var info in infos){
+                list += $"- {info.Data}";
+            }
+            var prompt = prompts["AnswerQuestion"]
+                            .Use()
+                            .Set("from",dialog.Interlocutor)
+                            .Set("list",list)
+                            .Set("question",dialog.Message.Text)
+                            .Get();
+            dialog.Results["AnswerQuestionPrompt"] = prompt;
+            await SaveDialog(dialog);
+            var result = await Api.Completions.CreateCompletionAsync(
+                prompt,
+                model : Model.DavinciText,
+                temperature: 1,
+                max_tokens: 256,
+                top_p: 1,
+                frequencyPenalty: 0,
+                presencePenalty: 0
+            );
+            dialog.Results["AnswerQuestion"] = result;
+            // get first choice
+            var choice = result.Completions.FirstOrDefault();
+            if(choice is null){
+                await SetNoAnswer(dialog,"[AnswerQuestion] Choice is null");
+                return;
+            }
+            await Answer(dialog,choice.Text.Trim());
+        }
         public async Task SetNoAnswer(Dialog dialog, string reason){
             dialog.Status = Dialog.State.NoAnswer;
             dialog.Results["NoAnswer"] = reason;
@@ -184,6 +254,10 @@ namespace Mirai.Services
             Log.Information($"Saving Dialog {dialog.Id}");
             dialog.UpdatedAt = DateTime.UtcNow;
             await rethink.Begin(out var R).End(R.Db("Mirai").Table("Dialogs").Get(dialog.Id).Update(dialog));
+        }
+        public async Task CreateInformation(Information information){
+            Log.Information($"Creating Information {information.Id}");
+            await rethink.Begin(out var R).End(R.Db("Mirai").Table("Informations").Insert(information));
         }
     }
 }

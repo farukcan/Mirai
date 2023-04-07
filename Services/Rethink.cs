@@ -1,5 +1,6 @@
 using RethinkDb.Driver;
 using RethinkDb.Driver.Ast;
+using RethinkDb.Driver.Linq;
 using RethinkDb.Driver.Net;
 using Log = Serilog.Log;
 
@@ -26,16 +27,19 @@ namespace Mirai.Services
                 .ConnectAsync();
             Log.Information("RethinkDB is connected");
         }
-
+        public RethinkQueryable<T> Linq<T>(string db,string table){
+            return R.Db(db).Table<T>(table,connection);
+        }
         public Rethink Begin(out RethinkDB r){
             r = R;
             return this;
         }
-
         public async Task<dynamic> End(ReqlExpr e){
             return await e.RunAsync(connection);
         }
-
+        public async Task<dynamic> End<T>(ReqlExpr e){
+            return await e.RunAsync<T>(connection);
+        }
         public async Task StopAsync(CancellationToken cancellationToken)
         {
             connection?.Close();
