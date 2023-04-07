@@ -2,4 +2,4 @@ Answer question of "[from]" according to the information list, if you don't know
 Information List: 
 [list]
 Question: "[question]"
-Ansert:  [insert]
+Answer:  [insert]

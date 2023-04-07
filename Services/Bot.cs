@@ -8,6 +8,9 @@ using Serilog;
 using OpenAI_API.Models;
 using Newtonsoft.Json;
 using System.Globalization;
+using Mirai.Commands;
+using Telegram.Bot.Types.ReplyMarkups;
+using System.Linq;
 
 namespace Mirai.Services
 {
@@ -32,6 +35,7 @@ namespace Mirai.Services
         }
         public async Task StartAsync(CancellationToken cancellationToken){
             Log.Information("Bot is running");
+            Commands.Repository.Load();
             ReceiverOptions receiverOptions = new()
             {
                 AllowedUpdates = Array.Empty<UpdateType>() // receive all update types
@@ -77,6 +81,16 @@ namespace Mirai.Services
                 Log.Information($"Message from {username} received");
                 var dialog = new Dialog(update.Message, username);
                 await CreateDialog(dialog);
+            }else if(update.Type == UpdateType.CallbackQuery){
+                var data = update.CallbackQuery.Data;
+                Log.Information($"CallbackQuery for {data}");
+                if(buttonCallbacks.ContainsKey(data)){
+                    await buttonCallbacks[data].WaitAsync(TimeSpan.FromSeconds(3));
+                    buttonCallbacks.Remove(data);
+                }else{
+                    Log.Warning($"{data} not found");
+                }
+                await client.DeleteMessageAsync(update.CallbackQuery.Message?.Chat.Id, update.CallbackQuery.Message.MessageId);
             }
         }
 
@@ -88,6 +102,10 @@ namespace Mirai.Services
 
         public async Task ProcessDialog(Dialog dialog){
             Log.Information($"Processing {dialog.Status} Dialog");
+            if(dialog.Message.Text is null) {
+                Log.Warning("Message text is null");
+                return;
+            };
             if(dialog.Status != Dialog.State.Answered){
                 if(dialog.Status == Dialog.State.Waiting){
                     await Analyze(dialog);
@@ -96,7 +114,7 @@ namespace Mirai.Services
                 }else if(dialog.Status == Dialog.State.Question){
                     await AnswerQuestion(dialog);
                 }else if(dialog.Status == Dialog.State.Order){
-                    await Answer(dialog,"Emir verdiniz");
+                    await Execute(dialog);
                 }
             }else{
                 Log.Warning("Cannot process dialog because it is already answered");
@@ -144,17 +162,37 @@ namespace Mirai.Services
                 await Answer(dialog,"Lütfen türkçe konuşun. Yabancı diller bana yasaklandı.");
                 return;
             }
-            // TODO: inline keyboard desteği ekle
+            var questionOption = new Tuple<string,Task>("Soru",new Task(async()=>{
+                    dialog.Status = Dialog.State.Question;
+                    await ProcessDialog(dialog);
+            }));
+            var informationOption = new Tuple<string,Task>("Bilgi",new Task(async()=>{
+                    dialog.Status = Dialog.State.Information;
+                    await ProcessDialog(dialog);
+            }));
+            var orderOption = new Tuple<string,Task>("Emir",new Task(async()=>{
+                    dialog.Status = Dialog.State.Order;
+                    await ProcessDialog(dialog);
+            }));
             if(dialog.IsQuestion && dialog.IsQuestion == dialog.IsInformation){
-                await Answer(dialog,"Soru mu sordunuz? Yoksa bilgi mi veriyorsunuz?");
+                var options = new List<Tuple<string,Task>>();
+                options.Add(questionOption);
+                options.Add(informationOption);
+                await Answer(dialog,"Soru mu sordunuz? Yoksa bilgi mi veriyorsunuz?",options);
                 return;
             }
             if(dialog.IsQuestion && dialog.IsQuestion == dialog.IsOrder){
-                await Answer(dialog,"Soru mu sordunuz? Yoksa emir mi verdiniz?");
+                var options = new List<Tuple<string,Task>>();
+                options.Add(questionOption);
+                options.Add(orderOption);
+                await Answer(dialog,"Soru mu sordunuz? Yoksa emir mi verdiniz?",options);
                 return;
             }
             if(dialog.IsInformation && dialog.IsInformation == dialog.IsOrder){
-                await Answer(dialog,"Bilgi mi verdiniz? Yoksa emir mi verdiniz?");
+                var options = new List<Tuple<string,Task>>();
+                options.Add(informationOption);
+                options.Add(orderOption);
+                await Answer(dialog,"Bilgi mi verdiniz? Yoksa emir mi verdiniz?",options);
                 return;
             }
             if(dialog.IsQuestion){
@@ -234,21 +272,123 @@ namespace Mirai.Services
                 await SetNoAnswer(dialog,"[AnswerQuestion] Choice is null");
                 return;
             }
-            await Answer(dialog,choice.Text.Trim());
+            var answer = choice.Text.Trim();
+            if(answer.ToLower().Contains("bilmiyorum")){
+                var chat = Api.Chat.CreateConversation();
+                var chatPrompt = prompts["Chat"]
+                            .Use()
+                            .Set("from", dialog.Interlocutor)
+                            .Get();
+                dialog.Results["ChatPrompt"] = chatPrompt;
+                await SaveDialog(dialog);
+                chat.AppendSystemMessage(chatPrompt);
+                chat.AppendUserInput(dialog.Message.Text);
+                string response = await chat.GetResponseFromChatbotAsync();
+                dialog.Results["ChatResponse"] = response;
+                answer = response;
+            }
+            await Answer(dialog,answer);
+        }
+        public async Task Execute(Dialog dialog){
+            if(dialog.Message.Text is null) return;
+            Log.Information($"Executing Order : {dialog.Message.Text}");
+            var table = "";
+            foreach(var command in Repository.Commands){
+                var parameterList = "";
+                if(command.Parameters.Count==0){
+                    parameterList = "-no parameters-";
+                }else{
+                    var list = new List<string>();
+                    foreach(var parameter in command.Parameters){
+                        list.Add($"{parameter.Key}: {parameter.Value}");
+                    }
+                    parameterList = string.Join(";",list);
+                }
+                table += $"{command.Name} | {command.Description} | {command.Function} | {parameterList}";
+            }
+            var prompt = prompts["Execute"]
+                            .Use()
+                            .Set("table",table)
+                            .Set("message",dialog.Message.Text)
+                            .Get();
+            dialog.Results["ExecutePrompt"] = prompt;
+            await SaveDialog(dialog);
+            var result = await Api.Completions.CreateCompletionAsync(
+                prompt,
+                model : Model.DavinciText,
+                temperature: 1,
+                max_tokens: 50,
+                top_p: 1,
+                frequencyPenalty: 0,
+                presencePenalty: 0
+            );
+            dialog.Results["Execute"] = result;
+            // get first choice
+            var choice = result.Completions.FirstOrDefault();
+            if(choice is null){
+                await SetNoAnswer(dialog,"[Execute] Choice is null");
+                return;
+            }
+            var function = choice.Text.Trim(); // Ex: SendMessage("Merhaba")
+            if(function.IndexOf("(")==-1){
+                await SetNoAnswer(dialog, $"[Execute] No function: {function}");
+                return;
+            }
+            // parse function name
+            var functionName = function.Substring(0,function.IndexOf("("));
+            // parse parameters
+            var functionContent = function.Substring(function.IndexOf("(")+1,function.LastIndexOf(")")-function.IndexOf("(")-1);
+            var parameters = functionContent.Split(",");
+            // trim "
+            for(int i=0;i<parameters.Length;i++){
+                // if first character is " or '
+                var doubleQuote = parameters[i].StartsWith("\"") && parameters[i].EndsWith("\"");
+                var singleQuote = parameters[i].StartsWith("'") && parameters[i].EndsWith("'");
+                if(doubleQuote || singleQuote){
+                    parameters[i] = parameters[i].Substring(1,parameters[i].Length-2);
+                }
+            }
+            // find command
+            var commandToRun = Repository.Commands.FirstOrDefault(c=>c.Function.StartsWith(functionName));
+            if(commandToRun is not null){
+                await SaveDialog(dialog);
+                await commandToRun.Handler(dialog,parameters);
+            }else{
+                await Answer(dialog,"Komut bulunamadı");
+            }
         }
         public async Task SetNoAnswer(Dialog dialog, string reason){
             dialog.Status = Dialog.State.NoAnswer;
             dialog.Results["NoAnswer"] = reason;
             await SaveDialog(dialog);
         }
-        public async Task Answer(Dialog dialog, string answer){
+        Dictionary<string,Task> buttonCallbacks = new();
+        public async Task Answer(Dialog dialog, string answer,List<Tuple<string,Task>>? buttons = null){
             dialog.Status = Dialog.State.Answered;
             dialog.Answer = answer;
             await SaveDialog(dialog);
-            await client.SendTextMessageAsync(
-                chatId: dialog.Message.Chat.Id,
-                text: answer
-            );
+            // add inline keyboard if have callback
+            if(buttons is not null){
+                // add buttons
+                var row = new List<InlineKeyboardButton>();
+                foreach(var button in buttons){
+                    (var buttonName, var callback) = button;
+                    row.Add(buttonName);
+                    buttonCallbacks[buttonName] = callback;
+                }
+                var keyboard = new InlineKeyboardMarkup(new[]{row});
+                await client.SendTextMessageAsync(
+                    chatId: dialog.Message.Chat.Id,
+                    text: answer,
+                    replyMarkup: keyboard
+                );
+
+            }else{
+                await client.SendTextMessageAsync(
+                    chatId: dialog.Message.Chat.Id,
+                    text: answer
+                );
+            }
         }
         public async Task SaveDialog(Dialog dialog){
             Log.Information($"Saving Dialog {dialog.Id}");

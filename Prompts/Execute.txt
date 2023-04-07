@@ -1,0 +1,14 @@
+Convert the message to a PascalCase function with parameters according to the table.
+EXAMPLE:
+"Run sample function" -> "Sample()"
+
+TABLE:
+Name | Description | Function | Parameters
+Sample Function| It's sample | Sample | -no parameters-
+[table]
+
+MESSAGE:
+[message]
+
+FUNCTION:
+[insert]

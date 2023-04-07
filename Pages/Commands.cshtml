@@ -1,0 +1,28 @@
+@page
+@model CommandsModel
+@{
+    ViewData["Title"] = "Commands";
+}
+<div class="accordion" id="Commands">
+@foreach (var command in Model.Commands)
+{
+  <div class="accordion-item">
+    <h2 class="accordion-header" id=@($"#{command.Id}-heading")>
+      <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target=@($"#{command.Id}-body") aria-expanded="true">
+        @command.Name
+      </button>
+    </h2>
+    <div id=@($"{command.Id}-body") class="accordion-collapse collapse show" aria-labelledby=@($"#{command.Id}-heading") data-bs-parent="#Commands">
+      <div class="accordion-body">
+        <h3>@command.Function</h3>
+        <p>@command.Description</p>
+        <h4>Parameters</h4>
+        @foreach (var parameter in command.Parameters)
+        {
+            <p><b>@parameter.Key : </b><small>@parameter.Value</small></p>
+        }
+      </div>
+    </div>
+  </div>
+}
+</div>
