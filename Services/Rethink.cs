@@ -18,16 +18,33 @@ namespace Mirai.Services
 
         public async Task StartAsync(CancellationToken cancellationToken)
         {
+            await ConnectAsync();
+        }
+        public Connection.Builder GetConnectionBuilder(){
             string? host = Environment.GetEnvironmentVariable("RETHINKDB_HOST") ?? "127.0.0.1";
+            string? user = Environment.GetEnvironmentVariable("RETHINKDB_USER") ?? "admin";
+            string? password = Environment.GetEnvironmentVariable("RETHINKDB_PASSWORD") ?? "";
             int port = int.Parse(Environment.GetEnvironmentVariable("RETHINKDB_PORT") ?? "28015");
-            connection = await R.Connection()
+            return R.Connection()
                 .Hostname(host) 
                 .Port(port) 
-                .Timeout(60)
+                .User(user, password)
+                .Timeout(60);
+        }
+        public async Task ConnectAsync(){
+            connection = await GetConnectionBuilder()
                 .ConnectAsync();
             Log.Information("RethinkDB is connected");
         }
+        public void ConnectSync(){
+            connection = GetConnectionBuilder()
+                .Connect();
+            Log.Information("RethinkDB is connected");
+        }
         public RethinkQueryable<T> Linq<T>(string db,string table){
+            if(connection is null || !connection.Open){
+                ConnectSync();
+            }
             return R.Db(db).Table<T>(table,connection);
         }
         public Rethink Begin(out RethinkDB r){
@@ -35,9 +52,15 @@ namespace Mirai.Services
             return this;
         }
         public async Task<dynamic> End(ReqlExpr e){
+            if(connection is null || !connection.Open){
+                await ConnectAsync();
+            }
             return await e.RunAsync(connection);
         }
         public async Task<dynamic> End<T>(ReqlExpr e){
+            if(connection is null || !connection.Open){
+                await ConnectAsync();
+            }
             return await e.RunAsync<T>(connection);
         }
         public async Task StopAsync(CancellationToken cancellationToken)

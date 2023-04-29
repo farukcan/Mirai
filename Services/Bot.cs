@@ -8,11 +8,11 @@ using Serilog;
 using OpenAI_API.Models;
 using Newtonsoft.Json;
 using System.Globalization;
-using Mirai.Commands;
+using Mirai.Controls;
 using Telegram.Bot.Types.ReplyMarkups;
 using System.Linq;
 
-namespace Mirai.Services
+namespace Mirai.Services // TODO: Make it "Channels"
 {
     public class Bot : IHostedService
     {
@@ -23,7 +23,7 @@ namespace Mirai.Services
         public Dictionary<string, Prompt> prompts = new();
         public List<Dialog> dialogs = new();
         public static OpenAIAPI Api => api ??= new OpenAIAPI();
-        private Rethink rethink;
+        public Rethink rethink;
         public Bot(){
             // create Telegram.Bot client
             if(BotToken is null)
@@ -35,7 +35,7 @@ namespace Mirai.Services
         }
         public async Task StartAsync(CancellationToken cancellationToken){
             Log.Information("Bot is running");
-            Commands.Repository.Load();
+            Controls.Guideline.Load();
             ReceiverOptions receiverOptions = new()
             {
                 AllowedUpdates = Array.Empty<UpdateType>() // receive all update types
@@ -85,7 +85,7 @@ namespace Mirai.Services
                 var data = update.CallbackQuery.Data;
                 Log.Information($"CallbackQuery for {data}");
                 if(buttonCallbacks.ContainsKey(data)){
-                    await buttonCallbacks[data].WaitAsync(TimeSpan.FromSeconds(3));
+                    buttonCallbacks[data]();
                     buttonCallbacks.Remove(data);
                 }else{
                     Log.Warning($"{data} not found");
@@ -159,37 +159,38 @@ namespace Mirai.Services
             dialog.IsOrder = analysisAnswers[2].ToLower().Contains("yes");
             bool isTurkish = analysisAnswers[3].ToLower().Contains("yes");
             if(!isTurkish){
-                await Answer(dialog,"Lütfen türkçe konuşun. Yabancı diller bana yasaklandı.");
-                return;
+                Log.Warning("Non turkish message");
+                //await Answer(dialog,"Lütfen türkçe konuşun. Yabancı diller bana yasaklandı.");
+                //return;
             }
-            var questionOption = new Tuple<string,Task>("Soru",new Task(async()=>{
+            var questionOption = new Tuple<string,Action>("Soru",(async()=>{
                     dialog.Status = Dialog.State.Question;
                     await ProcessDialog(dialog);
             }));
-            var informationOption = new Tuple<string,Task>("Bilgi",new Task(async()=>{
+            var informationOption = new Tuple<string,Action>("Bilgi",(async()=>{
                     dialog.Status = Dialog.State.Information;
                     await ProcessDialog(dialog);
             }));
-            var orderOption = new Tuple<string,Task>("Emir",new Task(async()=>{
+            var orderOption = new Tuple<string,Action>("Emir",(async()=>{
                     dialog.Status = Dialog.State.Order;
                     await ProcessDialog(dialog);
             }));
             if(dialog.IsQuestion && dialog.IsQuestion == dialog.IsInformation){
-                var options = new List<Tuple<string,Task>>();
+                var options = new List<Tuple<string,Action>>();
                 options.Add(questionOption);
                 options.Add(informationOption);
                 await Answer(dialog,"Soru mu sordunuz? Yoksa bilgi mi veriyorsunuz?",options);
                 return;
             }
             if(dialog.IsQuestion && dialog.IsQuestion == dialog.IsOrder){
-                var options = new List<Tuple<string,Task>>();
+                var options = new List<Tuple<string,Action>>();
                 options.Add(questionOption);
                 options.Add(orderOption);
                 await Answer(dialog,"Soru mu sordunuz? Yoksa emir mi verdiniz?",options);
                 return;
             }
             if(dialog.IsInformation && dialog.IsInformation == dialog.IsOrder){
-                var options = new List<Tuple<string,Task>>();
+                var options = new List<Tuple<string,Action>>();
                 options.Add(informationOption);
                 options.Add(orderOption);
                 await Answer(dialog,"Bilgi mi verdiniz? Yoksa emir mi verdiniz?",options);
@@ -293,7 +294,7 @@ namespace Mirai.Services
             if(dialog.Message.Text is null) return;
             Log.Information($"Executing Order : {dialog.Message.Text}");
             var table = "";
-            foreach(var command in Repository.Commands){
+            foreach(var command in Guideline.Commands){
                 var parameterList = "";
                 if(command.Parameters.Count==0){
                     parameterList = "-no parameters-";
@@ -313,6 +314,7 @@ namespace Mirai.Services
                             .Get();
             dialog.Results["ExecutePrompt"] = prompt;
             await SaveDialog(dialog);
+            Log.Information($"Prompting for execute");
             var result = await Api.Completions.CreateCompletionAsync(
                 prompt,
                 model : Model.DavinciText,
@@ -330,6 +332,7 @@ namespace Mirai.Services
                 return;
             }
             var function = choice.Text.Trim(); // Ex: SendMessage("Merhaba")
+            Log.Information(function);
             if(function.IndexOf("(")==-1){
                 await SetNoAnswer(dialog, $"[Execute] No function: {function}");
                 return;
@@ -349,9 +352,10 @@ namespace Mirai.Services
                 }
             }
             // find command
-            var commandToRun = Repository.Commands.FirstOrDefault(c=>c.Function.StartsWith(functionName));
+            var commandToRun = Guideline.Commands.FirstOrDefault(c=>c.Function.StartsWith(functionName));
             if(commandToRun is not null){
                 await SaveDialog(dialog);
+                Log.Information($"Running command {commandToRun.Name}");
                 await commandToRun.Handler(dialog,parameters);
             }else{
                 await Answer(dialog,"Komut bulunamadı");
@@ -362,8 +366,8 @@ namespace Mirai.Services
             dialog.Results["NoAnswer"] = reason;
             await SaveDialog(dialog);
         }
-        Dictionary<string,Task> buttonCallbacks = new();
-        public async Task Answer(Dialog dialog, string answer,List<Tuple<string,Task>>? buttons = null){
+        Dictionary<string,Action> buttonCallbacks = new();
+        public async Task Answer(Dialog dialog, string answer,List<Tuple<string,Action>>? buttons = null){
             dialog.Status = Dialog.State.Answered;
             dialog.Answer = answer;
             await SaveDialog(dialog);
@@ -398,6 +402,10 @@ namespace Mirai.Services
         public async Task CreateInformation(Information information){
             Log.Information($"Creating Information {information.Id}");
             await rethink.Begin(out var R).End(R.Db("Mirai").Table("Informations").Insert(information));
+        }
+        public async Task DeleteInformation(Information information){
+            Log.Information($"Deleting Information {information.Id}");
+            await rethink.Begin(out var R).End(R.Db("Mirai").Table("Informations").Get(information.Id).Delete());
         }
     }
 }

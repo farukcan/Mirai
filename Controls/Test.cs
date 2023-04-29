@@ -1,12 +1,12 @@
 using Mirai.Models;
 using Mirai.Services;
 
-namespace Mirai.Commands
+namespace Mirai.Controls
 {
     public static class Test
     {
         public static void Load(){
-            Repository.Commands.Add(
+            Guideline.Commands.Add(
                 Command.Builder
                     .SetName("Send Message")
                     .SetDescription("Sends message to user")
@@ -15,7 +15,7 @@ namespace Mirai.Commands
                     .SetHandler(SendMessage)
                     .Build()
             );
-            Repository.Commands.Add(
+            Guideline.Commands.Add(
                 Command.Builder
                     .SetName("Sum two number")
                     .SetDescription("Sums two numbers")
@@ -30,9 +30,16 @@ namespace Mirai.Commands
         private static async Task Sum(Dialog dialog, string[] args)
         {
             if(Bot.Instance is null) return;
-            int x = int.Parse(args[0]);
-            int y = int.Parse(args[1]);
-            await Bot.Instance.Answer(dialog, $"Sum is {x+y}");
+            try
+            {
+                int x = int.Parse(args[0]);
+                int y = int.Parse(args[1]);
+                await Bot.Instance.Answer(dialog, $"Sum is {x+y}");
+            }
+            catch (System.Exception)
+            {
+                await Bot.Instance.Answer(dialog, $"Error, cannot sum {string.Join(",",args)}");
+            }
         }
 
         private static async Task SendMessage(Dialog dialog, string[] args)

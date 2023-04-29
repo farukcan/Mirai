@@ -16,7 +16,7 @@ namespace Mirai.Pages
 
         public void OnGet()
         {
-            Commands = Mirai.Commands.Repository.Commands;
+            Commands = Mirai.Controls.Guideline.Commands;
         }
     }
 }

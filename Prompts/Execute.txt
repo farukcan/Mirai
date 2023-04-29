@@ -1,10 +1,15 @@
-Convert the message to a PascalCase function with parameters according to the table.
+Convert the message to a PascalCase function with parameters according to the table. 
+If there is no information about the input parameters, set them null. (Example : SetPlanet(null, null))
+
 EXAMPLE:
 "Run sample function" -> "Sample()"
+"Sum 4 and 5" -> "Sum(4, 5)"
+"Set a planet" -> "SetPlanet(null, null)" 
 
 TABLE:
 Name | Description | Function | Parameters
-Sample Function| It's sample | Sample | -no parameters-
+Sample Function| It's sample | Sample() | -no parameters-
+SetPlanet| Sets the planet  | SetPlanet(name,size) | name : name of the planet, size: size of the planet
 [table]
 
 MESSAGE:

@@ -1,0 +1,22 @@
+{
+  "name": "mirai",
+  "version": "1.0.0",
+  "description": "mir ai",
+  "main": "index.js",
+  "scripts": {
+    "dev": "dotnet watch run"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/farukcan/Mirai.git"
+  },
+  "keywords": [
+    "ai"
+  ],
+  "author": "farukcan",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/farukcan/Mirai/issues"
+  },
+  "homepage": "https://github.com/farukcan/Mirai#readme"
+}

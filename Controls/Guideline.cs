@@ -1,13 +1,14 @@
 using Mirai.Models;
 
-namespace Mirai.Commands
+namespace Mirai.Controls
 {
-    public static class Repository
+    public static class Guideline
     {
         // singleton
         public static List<Command> Commands { get; set; } = new List<Command>();
         public static void Load(){
             Test.Load();
+            RssBot.Load();
         }
     }
 }
